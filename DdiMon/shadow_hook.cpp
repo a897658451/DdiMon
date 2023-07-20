@@ -13,12 +13,13 @@
 #include "../HyperPlatform/HyperPlatform/log.h"
 #include "../HyperPlatform/HyperPlatform/util.h"
 #include "../HyperPlatform/HyperPlatform/ept.h"
+#include "../HyperPlatform/HyperPlatform/ldasm.h"
 #undef _HAS_EXCEPTIONS
 #define _HAS_EXCEPTIONS 0
 #include <vector>
 #include <memory>
 #include <algorithm>
-#include "capstone.h"
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -428,33 +429,12 @@ _Use_decl_annotations_ EXTERN_C static SIZE_T ShpGetInstructionSize(
     return 0;
   }
 
-  // Disassemble at most 15 bytes to get an instruction size
-  csh handle = {};
-  const auto mode = IsX64() ? CS_MODE_64 : CS_MODE_32;
-  if (cs_open(CS_ARCH_X86, mode, &handle) != CS_ERR_OK) {
-    KeRestoreFloatingPointState(&float_save);
-    return 0;
-  }
+  ldasm_data ld;
+  uint32_t is64 = 1;
+  auto ldsize = ldasm(address, &ld, is64);
 
-  static const auto kLongestInstSize = 15;
-  cs_insn* instructions = nullptr;
-  const auto count =
-      cs_disasm(handle, reinterpret_cast<uint8_t*>(address), kLongestInstSize,
-                reinterpret_cast<uint64_t>(address), 1, &instructions);
-  if (count == 0) {
-    cs_close(&handle);
-    KeRestoreFloatingPointState(&float_save);
-    return 0;
-  }
-
-  // Get a size of the first instruction
-  const auto size = instructions[0].size;
-  cs_free(instructions, count);
-  cs_close(&handle);
-
-  // Restore floating point state
   KeRestoreFloatingPointState(&float_save);
-  return size;
+  return ldsize;
 }
 
 // Returns code bytes for inline hooking
